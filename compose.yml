@@ -19,11 +19,12 @@ services:
       retries: 10
       start_period: 30s
 
-  rabbit1:
+  rabbit01:
     image: rabbitmq:4.3-management
-    container_name: rabbit1
-    hostname: rabbit1
+    container_name: rabbit01
+    hostname: rabbit01
     environment:
+      RABBITMQ_ERLANG_COOKIE: ${RABBITMQ_COOKIE}
       RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
       RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
     ports:
@@ -31,6 +32,29 @@ services:
       - "15672:15672"
     volumes:
       - datos-rabbit:/var/lib/rabbitmq
+      - ./rabbitmq/cluster.conf:/etc/rabbitmq/conf.d/20-cluster.conf:ro
+      - ./rabbitmq/politicas.json:/etc/rabbitmq/politicas.json:ro
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
+      interval: 10s
+      timeout: 10s
+      retries: 10
+      start_period: 60s
+
+  rabbit02:
+    image: rabbitmq:4.3-management
+    container_name: rabbit02
+    hostname: rabbit02
+    environment:
+      RABBITMQ_ERLANG_COOKIE: ${RABBITMQ_COOKIE}
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_PASSWORD}
+    ports:
+      - "5673:5672"
+      - "15673:15672"
+    volumes:
+      - datos-rabbit2:/var/lib/rabbitmq
+      - ./rabbitmq/cluster.conf:/etc/rabbitmq/conf.d/20-cluster.conf:ro
     healthcheck:
       test: ["CMD", "rabbitmq-diagnostics", "-q", "check_port_connectivity"]
       interval: 10s
@@ -43,7 +67,7 @@ services:
     init: true
     env_file: ../biblioteca-eventos/.env
     environment:
-      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbit1:5672
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbit01:5672
       POSTGRES_HOST: postgres
       POSTGRES_PORT: "5432"
     ports:
@@ -51,7 +75,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      rabbit1:
+      rabbit01:
         condition: service_healthy
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://localhost:3010/salud').then((r) => process.exit(r.ok ? 0 : 1), () => process.exit(1))"]
@@ -77,7 +101,7 @@ services:
     command: ["node", "prestamos.mjs"]
     env_file: ../L1-gateway/servicios/.env
     environment:
-      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbit1:5672
+      RABBITMQ_URL: amqp://${RABBITMQ_USER}:${RABBITMQ_PASSWORD}@rabbit01:5672
       POSTGRES_HOST: postgres
       POSTGRES_PORT: "5432"
     ports:
@@ -85,7 +109,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      rabbit1:
+      rabbit01:
         condition: service_healthy
 
   bff:
@@ -124,3 +148,5 @@ volumes:
     name: datos-postgres
   datos-rabbit:
     name: datos-rabbit
+  datos-rabbit2:
+    name: datos-rabbit2
